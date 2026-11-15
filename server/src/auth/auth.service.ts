@@ -38,7 +38,7 @@ import { UsersService } from '../users/users.service.js';
   }
   private jwks?: ReturnType<typeof createRemoteJWKSet>;
   /** Exchange a Neon Auth (Google) JWT for an EventSense session. New users become attendees. */
-  async loginWithNeon(token: string) {
+  async loginWithNeon(token: string, asOrganizer = false) {
     const url = process.env.NEON_AUTH_JWKS_URL;
     if (!url) throw new UnauthorizedException('Google sign-in is not configured');
     this.jwks ??= createRemoteJWKSet(new URL(url));
@@ -50,8 +50,22 @@ import { UsersService } from '../users/users.service.js';
     const name = (typeof payload.name === 'string' && payload.name.trim()) || email.split('@')[0];
     const include = { organization: { select: { id: true, name: true, slug: true } } };
     let user = await this.prisma.user.findUnique({ where: { email }, include });
-    if (!user) user = await this.prisma.user.create({ data: { name, email, role: Role.USER, passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12) }, include });
+    if (!user) user = await this.prisma.user.create({ data: { name, email, role: asOrganizer ? Role.ORGANIZER : Role.USER, passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12) }, include });
     return { accessToken: this.token(user), user: this.safe(user) };
+  }
+  /** Organizers who signed up with Google name their organization after signup. */
+  async setOrganization(userId: string, organizationName: string) {
+    const name = organizationName.trim();
+    const include = { organization: { select: { id: true, name: true, slug: true } } };
+    const current = await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, include });
+    if (current.organizationId) {
+      await this.prisma.organization.update({ where: { id: current.organizationId }, data: { name } });
+    } else {
+      const slug = `${name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'organization'}-${randomUUID().slice(0, 8)}`;
+      const organization = await this.prisma.organization.create({ data: { name, slug } });
+      await this.prisma.user.update({ where: { id: userId }, data: { organizationId: organization.id } });
+    }
+    return this.safe(await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, include }));
   }
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() }, include: { organization: { select: { id: true, name: true, slug: true } } } });
@@ -60,3 +74,4 @@ import { UsersService } from '../users/users.service.js';
   }
   me(id: string) { return this.users.profile(id); }
 }
+

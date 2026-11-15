@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import nodemailer from 'nodemailer';
+import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EventsService } from '../events/events.service.js';
 import { BookingsService } from '../bookings/bookings.service.js';
@@ -8,7 +8,7 @@ import { NotificationDto } from './dto.js';
 import { lockEvent } from '../common/lock-event.js';
 @Injectable() export class NotificationsService {
   private logger = new Logger(NotificationsService.name);
-  constructor(private prisma: PrismaService, private events: EventsService, private bookings: BookingsService) {}
+  constructor(private prisma: PrismaService, private events: EventsService, private bookings: BookingsService, private mail: MailService) {}
   async create(eventId: string, userId: string, dto: NotificationDto) {
     await this.events.own(eventId, userId);
     const notification = await this.prisma.notification.create({ data: { ...dto, eventId, createdById: userId, scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : new Date() } });
@@ -21,11 +21,7 @@ import { lockEvent } from '../common/lock-event.js';
     if (event.createdById !== userId && !await this.prisma.booking.findFirst({ where: { eventId, userId, status: { in: ['CONFIRMED', 'CHECKED_IN', 'WAITLISTED'] } } })) throw new ForbiddenException();
     return this.prisma.notification.findMany({ where: { eventId, OR: [{ recipientUserId: null }, { recipientUserId: userId }] }, orderBy: { scheduledAt: 'desc' } });
   }
-  private async email(to: string, subject: string, body: string) {
-    if (!process.env.SMTP_HOST || !process.env.SMTP_FROM) { this.logger.log(`Email to ${to}: ${subject} - ${body}`); await this.prisma.outbox.create({ data: { to, subject, body } }); return; }
-    const transport = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT ?? 587), auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined });
-    await transport.sendMail({ from: process.env.SMTP_FROM, to, subject, text: body });
-  }
+  private email(to: string, subject: string, body: string) { return this.mail.send(to, subject, body); }
   private async deliver(n: { id: string; eventId: string; recipientUserId: string | null; title: string; body: string }) {
     const users = await this.prisma.booking.findMany({ where: { eventId: n.eventId, status: { in: ['CONFIRMED', 'CHECKED_IN', 'WAITLISTED'] }, userId: n.recipientUserId ?? undefined }, include: { user: true } });
     for (const b of users) await this.email(b.user.email, n.title, n.body);

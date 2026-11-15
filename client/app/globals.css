@@ -23,3 +23,16 @@ button,a,input,textarea,select { -webkit-tap-highlight-color:transparent; } butt
 @media (prefers-reduced-motion:reduce) { .marquee-track { animation:none; } }
 .neo { border:2px solid #141414; box-shadow:5px 5px 0 #141414; } .neo-sm { border:2px solid #141414; box-shadow:3px 3px 0 #141414; }
 .sticker { position:absolute; z-index:5; border:2px solid #141414; padding:6px 14px; font-size:11px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#141414; white-space:nowrap; }
+/* Dashboard theme: the landing-page look for organizer and attendee panels */
+.dash { --neo:#141414; } .dark .dash { --neo:#58695e; }
+.dash .card, .dash .card-flat { border:2px solid var(--neo); border-radius:20px; box-shadow:5px 5px 0 var(--neo); } .dash .card-flat { box-shadow:3px 3px 0 var(--neo); }
+.dash h1 { font-weight:800; text-transform:uppercase; letter-spacing:-.045em; line-height:.98; }
+.dash .eyebrow { background:#F4E55A; color:#141414; border:2px solid #141414; border-radius:999px; padding:4px 12px; font-size:10px; transform:rotate(-1.5deg); }
+.dash .btn { border:2px solid var(--neo); border-radius:12px; text-transform:uppercase; letter-spacing:.05em; font-weight:800; font-size:12px; }
+.dash .btn-primary { background:#141414; color:#fff; box-shadow:3px 3px 0 var(--neo); } .dash .btn-primary:hover:not(:disabled) { background:#141414; }
+.dark .dash .btn-primary { background:#F4E55A; color:#141414; } .dark .dash .btn-primary:hover:not(:disabled) { background:#F4E55A; }
+.dash .btn-secondary { background:var(--surface); box-shadow:3px 3px 0 var(--neo); } .dash .btn-ghost { border-color:transparent; }
+.dash .input { border:2px solid var(--neo); border-radius:12px; }
+.dash thead { background:#F4E55A !important; color:#141414 !important; } .dash thead th { font-weight:800; text-transform:uppercase; letter-spacing:.08em; font-size:11px; border-bottom:2px solid #141414; }
+.dash .skeleton { border:2px solid var(--neo); border-radius:20px; }
+.dash [role="tab"][data-state="active"] { background:#F4E55A; color:#141414 !important; border-color:#141414 !important; border-radius:12px 12px 0 0; }

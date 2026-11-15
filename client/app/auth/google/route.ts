@@ -14,10 +14,10 @@ export async function GET(request: NextRequest) {
     if (!session?.user) return fail('Google sign-in was not completed.');
     const { data, error } = await (neonAuth as unknown as { token: () => Promise<{ data?: { token?: string } | null; error?: unknown }> }).token();
     if (error || !data?.token) return fail('Could not verify your Google account.');
-    const upstream = await fetch(`${base}/auth/neon`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: data.token }), cache: 'no-store' });
+    const upstream = await fetch(`${base}/auth/neon`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: data.token, asOrganizer: request.nextUrl.searchParams.get('org') === '1' }), cache: 'no-store' });
     const result = await upstream.json().catch(() => null);
     if (!upstream.ok || !result?.accessToken) return fail(result?.message ?? 'Google sign-in failed.');
-    const destination = safeNext(request.nextUrl.searchParams.get('next')) ?? (result.user.role === 'USER' ? '/me' : '/admin');
+    const destination = safeNext(request.nextUrl.searchParams.get('next')) ?? (result.user.role === 'USER' ? '/me' : result.user.role === 'ORGANIZER' && !result.user.organization ? '/onboarding/organization' : '/admin');
     const response = NextResponse.redirect(new URL(destination, request.url));
     const cookie = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, path: '/', maxAge: 86400 };
     response.cookies.set('eventsense_token', result.accessToken, cookie);
