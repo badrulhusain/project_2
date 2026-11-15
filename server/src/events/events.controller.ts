@@ -20,4 +20,5 @@ import { EventsService } from './events.service.js';
 @ApiTags('events') @Controller('admin/events') export class AdminEventsController {
   constructor(private events: EventsService) {}
   @Get() @Protected(Role.ORGANIZER, Role.ADMIN) list(@Req() req: { user: AuthUser }) { return this.events.adminList(req.user.id); }
+  @Get('attendees') @Protected(Role.ORGANIZER, Role.ADMIN) allAttendees(@Req() req: { user: AuthUser }) { return this.events.allAttendees(req.user.id); }
 }

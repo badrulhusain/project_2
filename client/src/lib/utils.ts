@@ -12,3 +12,5 @@ export const calendarHref = (event: { title: string; description: string; venue:
   const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT', `DTSTART:${stamp(event.startAt)}`, `DTEND:${stamp(event.endAt)}`, `SUMMARY:${event.title}`, `LOCATION:${event.venue}`, `DESCRIPTION:${event.description.replace(/\n/g, ' ')}`, 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
   return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
 };
+
+export const eventTypeLabel = (event: { type: string; customType?: string | null }) => event.type === 'CUSTOM' ? (event.customType?.trim() || 'Custom') : titleCase(event.type);

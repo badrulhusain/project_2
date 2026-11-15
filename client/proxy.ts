@@ -6,7 +6,7 @@ export function proxy(request: NextRequest) {
     const url = new URL('/login', request.url); url.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
   }
-  if (request.nextUrl.pathname.startsWith('/admin') && role !== 'ADMIN') return NextResponse.redirect(new URL('/me', request.url));
+  if (request.nextUrl.pathname.startsWith('/admin') && role !== 'ADMIN' && role !== 'ORGANIZER') return NextResponse.redirect(new URL('/me', request.url));
   return NextResponse.next();
 }
 export const config = { matcher: ['/me/:path*', '/admin/:path*'] };

@@ -2,7 +2,8 @@ import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { Prisma, Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { LoginDto, RegisterDto, RegisterOrganizationDto } from './dto.js';
 import { UsersService } from '../users/users.service.js';
@@ -19,7 +20,7 @@ import { UsersService } from '../users/users.service.js';
   async registerOrganization(dto: RegisterOrganizationDto) {
     const email = dto.email.trim().toLowerCase();
     const organizationName = dto.organizationName.trim();
-    const name = dto.name.trim();
+    const name = dto.name?.trim() || organizationName;
     if (await this.prisma.user.findUnique({ where: { email } })) throw new ConflictException('Email already registered');
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const baseSlug = organizationName.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'organization';
@@ -34,6 +35,23 @@ import { UsersService } from '../users/users.service.js';
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('Email already registered');
       throw error;
     }
+  }
+  private jwks?: ReturnType<typeof createRemoteJWKSet>;
+  /** Exchange a Neon Auth (Google) JWT for an EventSense session. New users become attendees. */
+  async loginWithNeon(token: string) {
+    const url = process.env.NEON_AUTH_JWKS_URL;
+    if (!url) throw new UnauthorizedException('Google sign-in is not configured');
+    this.jwks ??= createRemoteJWKSet(new URL(url));
+    let payload: Record<string, unknown>;
+    try { ({ payload } = await jwtVerify(token, this.jwks)); } catch { throw new UnauthorizedException('Invalid Google sign-in'); }
+    const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
+    if (!email) throw new UnauthorizedException('Google account has no email');
+    if (payload.email_verified === false) throw new UnauthorizedException('Google email is not verified');
+    const name = (typeof payload.name === 'string' && payload.name.trim()) || email.split('@')[0];
+    const include = { organization: { select: { id: true, name: true, slug: true } } };
+    let user = await this.prisma.user.findUnique({ where: { email }, include });
+    if (!user) user = await this.prisma.user.create({ data: { name, email, role: Role.USER, passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12) }, include });
+    return { accessToken: this.token(user), user: this.safe(user) };
   }
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() }, include: { organization: { select: { id: true, name: true, slug: true } } } });

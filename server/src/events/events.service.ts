@@ -41,13 +41,17 @@ import { CreateEventDto, EquipmentDto, FoodItemDto, ParkingZoneDto, UpdateEventD
     if (!events.length) return [];
     const ids = events.map(event => event.id);
     const [counts, zones, parking] = await Promise.all([
-      this.prisma.booking.groupBy({ by: ['eventId'], where: { eventId: { in: ids }, status: { in: ['CONFIRMED', 'CHECKED_IN'] } }, _count: true }),
+      this.prisma.booking.groupBy({ by: ['eventId'], where: { eventId: { in: ids }, status: { in: ['CONFIRMED', 'CHECKED_IN'] } }, _sum: { seats: true } }),
       this.prisma.parkingZone.findMany({ where: { eventId: { in: ids } } }),
       this.prisma.booking.groupBy({ by: ['parkingZoneId'], where: { eventId: { in: ids }, status: { in: ['CONFIRMED', 'CHECKED_IN'] }, parkingZoneId: { not: null } }, _count: true }),
     ]);
-    return events.map(event => { const seatsTaken = counts.find(row => row.eventId === event.id)?._count ?? 0; return { ...event, seatsTaken, seatsAvailable: Math.max(0, Math.min(event.capacity, event.safetyLimit) - seatsTaken), parkingAvailability: zones.filter(zone => zone.eventId === event.id).map(zone => ({ ...zone, available: Math.max(0, zone.capacity - (parking.find(row => row.parkingZoneId === zone.id)?._count ?? 0)) })) }; });
+    return events.map(event => { const seatsTaken = counts.find(row => row.eventId === event.id)?._sum.seats ?? 0; return { ...event, seatsTaken, seatsAvailable: Math.max(0, Math.min(event.capacity, event.safetyLimit) - seatsTaken), parkingAvailability: zones.filter(zone => zone.eventId === event.id).map(zone => ({ ...zone, available: Math.max(0, zone.capacity - (parking.find(row => row.parkingZoneId === zone.id)?._count ?? 0)) })) }; });
   }
   async adminList(userId: string) { return this.prisma.event.findMany({ where: (await this.isAdmin(userId)) ? {} : { createdById: userId }, include: { _count: { select: { bookings: true } } }, orderBy: { startAt: 'desc' } }); }
+  async allAttendees(userId: string) {
+    const owner = (await this.isAdmin(userId)) ? {} : { createdById: userId };
+    return this.prisma.booking.findMany({ where: { event: owner, status: { not: 'CANCELLED' } }, include: { event: { select: { id: true, title: true, startAt: true, venue: true } }, user: { select: { id: true, name: true, email: true } }, parkingZone: true, foodOrder: { include: { items: { include: { foodItem: true } } } } }, orderBy: { createdAt: 'desc' } });
+  }
   async attendees(eventId: string, userId: string) {
     await this.own(eventId, userId);
     return this.prisma.booking.findMany({ where: { eventId }, include: { user: { select: { id: true, name: true, email: true } }, parkingZone: true, foodOrder: { include: { items: { include: { foodItem: true } } } } }, orderBy: { createdAt: 'asc' } });
@@ -56,8 +60,8 @@ import { CreateEventDto, EquipmentDto, FoodItemDto, ParkingZoneDto, UpdateEventD
     const event = await this.prisma.event.findUnique({ where: { id }, include: { foodItems: true, parkingZones: true, equipment: true } });
     if (!event || (event.status !== EventStatus.PUBLISHED && event.status !== EventStatus.LIVE)) throw new NotFoundException('Event not found');
     const [seatsTaken, waitlistCount, parking] = await Promise.all([
-      this.prisma.booking.count({ where: { eventId: id, status: { in: ['CONFIRMED', 'CHECKED_IN'] } } }),
-      this.prisma.booking.count({ where: { eventId: id, status: 'WAITLISTED' } }),
+      this.prisma.booking.aggregate({ where: { eventId: id, status: { in: ['CONFIRMED', 'CHECKED_IN'] } }, _sum: { seats: true } }).then(r => r._sum.seats ?? 0),
+      this.prisma.booking.aggregate({ where: { eventId: id, status: 'WAITLISTED' }, _sum: { seats: true } }).then(r => r._sum.seats ?? 0),
       this.prisma.booking.groupBy({ by: ['parkingZoneId'], where: { eventId: id, status: { in: ['CONFIRMED', 'CHECKED_IN'] }, parkingZoneId: { not: null } }, _count: true }),
     ]);
     return { ...event, seatsTaken, seatsAvailable: Math.max(0, Math.min(event.capacity, event.safetyLimit) - seatsTaken), waitlistCount,

@@ -1,6 +1,6 @@
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { EventType, FoodTag, VehicleType } from '@prisma/client';
-import { IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUrl, Min } from 'class-validator';
+import { ValidateIf, MaxLength, IsNotEmpty, IsBoolean, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsPositive, IsString, IsUrl, Min } from 'class-validator';
 export class CreateEventDto {
   @ApiProperty() @IsString() title: string;
   @ApiProperty() @IsString() description: string;
@@ -10,6 +10,7 @@ export class CreateEventDto {
   @ApiProperty() @IsDateString() startAt: string;
   @ApiProperty() @IsDateString() endAt: string;
   @ApiProperty({ enum: EventType }) @IsEnum(EventType) type: EventType;
+  @ApiProperty({ required: false }) @ValidateIf(o => o.type === EventType.CUSTOM) @IsString() @IsNotEmpty() @MaxLength(40) customType?: string;
   @ApiProperty() @IsBoolean() isPaid: boolean;
   @ApiProperty() @IsInt() @IsPositive() capacity: number;
   @ApiProperty() @IsInt() @IsPositive() safetyLimit: number;

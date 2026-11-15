@@ -11,6 +11,8 @@ import { lockEvent } from '../common/lock-event.js';
     if (!['CONFIRMED', 'CHECKED_IN'].includes(booking.status)) throw new BadRequestException('Active booking required');
     if (new Date() > booking.event.foodCutoffAt) throw new BadRequestException('Food ordering is closed');
     if (new Set(dto.items.map(i => i.foodItemId)).size !== dto.items.length) throw new BadRequestException('Duplicate food item');
+    const totalMeals = dto.items.reduce((sum, i) => sum + i.quantity, 0);
+    if (totalMeals > booking.seats) throw new BadRequestException(`You can order up to ${booking.seats} ${booking.seats === 1 ? 'meal' : 'meals'} for ${booking.seats} reserved ${booking.seats === 1 ? 'seat' : 'seats'}`);
     if (booking.foodOrder?.items.some(i => i.collectedQty > 0)) throw new ConflictException('Collected food order cannot be replaced');
     return this.prisma.$transaction(async tx => {
       await lockEvent(tx, booking.eventId);

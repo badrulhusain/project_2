@@ -11,18 +11,19 @@ import { CalibrationService } from '../calibration/calibration.service.js';
     if (event.status === 'CLOSED') throw new BadRequestException('Event already closed');
     const planned = await this.planner.generate(eventId, userId);
     const bookings = await this.prisma.booking.findMany({ where: { eventId }, include: { foodOrder: { include: { items: true } } } });
-    const booked = bookings.filter(b => ['CONFIRMED', 'CHECKED_IN', 'RELEASED'].includes(b.status)).length;
+    const booked = bookings.filter(b => ['CONFIRMED', 'CHECKED_IN', 'RELEASED'].includes(b.status)).reduce((sum, b) => sum + b.seats, 0);
     const checked = bookings.filter(b => b.status === 'CHECKED_IN');
+    const checkedSeats = checked.reduce((sum, b) => sum + b.seats, 0);
     const collected = checked.flatMap(b => b.foodOrder?.items ?? []).reduce((sum, i) => sum + i.collectedQty, 0);
     const ordered = bookings.flatMap(b => b.foodOrder?.items ?? []).reduce((sum, i) => sum + i.quantity, 0);
-    const actual = { attendance: checked.length, booked, foodCollected: collected, foodOrdered: ordered,
+    const actual = { attendance: checkedSeats, booked, foodCollected: collected, foodOrdered: ordered,
       parkingUsed: checked.filter(b => b.parkingZoneId).length, mealsSaved: Math.max(0, booked - collected),
-      seatUtilization: checked.length / Math.min(event.capacity, event.safetyLimit), peakKw: planned.power.peakKw,
+      seatUtilization: checkedSeats / Math.min(event.capacity, event.safetyLimit), peakKw: planned.power.peakKw,
       foodByItem: Object.entries(checked.flatMap(b => b.foodOrder?.items ?? []).reduce<Record<string, number>>((acc, i) => { acc[i.foodItemId] = (acc[i.foodItemId] ?? 0) + i.collectedQty; return acc; }, {})).map(([foodItemId, quantity]) => ({ foodItemId, quantity })) };
     return this.prisma.$transaction(async tx => {
       await tx.event.update({ where: { id: eventId }, data: { status: 'CLOSED' } });
       const report = await tx.eventReport.create({ data: { eventId, plannedJson: planned as unknown as Prisma.InputJsonValue, actualJson: actual as Prisma.InputJsonValue } });
-      await this.calibration.update(tx, event.type, event.isPaid, booked, checked.length, ordered, collected);
+      await this.calibration.update(tx, event.type, event.isPaid, booked, checkedSeats, ordered, collected);
       return report;
     });
   }

@@ -19,7 +19,8 @@ enum EventType {
   CULTURAL
   SPORTS
   FEST
-  OTHER
+  WEDDING
+  CUSTOM
 }
 enum EventStatus {
   DRAFT
@@ -91,6 +92,7 @@ model Event {
   startAt DateTime
   endAt DateTime
   type EventType
+  customType String?
   isPaid Boolean @default(false)
   capacity Int
   safetyLimit Int
@@ -159,6 +161,7 @@ model Booking {
   user User @relation(fields: [userId], references: [id])
   status BookingStatus
   waitlistPosition Int?
+  seats Int @default(1)
   qrToken String @unique
   parkingZoneId String? @db.Uuid
   parkingZone ParkingZone? @relation(fields: [parkingZoneId], references: [id])

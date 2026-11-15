@@ -8,11 +8,15 @@ export class RegisterDto {
 }
 export class RegisterOrganizationDto {
   @ApiProperty() @IsString() @MinLength(2) organizationName: string;
-  @ApiProperty() @IsString() @MinLength(2) name: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() @MinLength(2) name?: string;
   @ApiProperty() @IsEmail() email: string;
   @ApiProperty() @IsString() @MinLength(8) password: string;
 }
 export class LoginDto {
   @ApiProperty() @IsEmail() email: string;
   @ApiProperty() @IsString() password: string;
+}
+
+export class NeonLoginDto {
+  @ApiProperty() @IsString() token: string;
 }

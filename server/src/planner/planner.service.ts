@@ -12,7 +12,7 @@ import * as forecast from './forecast.js';
       this.prisma.foodItem.findMany({ where: { eventId } }), this.prisma.parkingZone.findMany({ where: { eventId } }), this.prisma.equipment.findMany({ where: { eventId } }),
     ]);
     const rates = stat ?? forecast.DEFAULT_RATES[event.isPaid ? 'paid' : 'free'];
-    const attendance = forecast.attendance(bookings.length, rates);
+    const attendance = forecast.attendance(bookings.reduce((sum, b) => sum + b.seats, 0), rates);
     const capacity = Math.min(event.capacity, event.safetyLimit);
     return { attendance, seats: forecast.seats(attendance.likely, capacity, event.isPaid),
       food: forecast.food(foodItems.map(item => ({ id: item.id, name: item.name, unitCost: item.unitCost,

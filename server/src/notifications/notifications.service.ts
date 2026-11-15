@@ -43,7 +43,7 @@ import { lockEvent } from '../common/lock-event.js';
         await lockEvent(tx, event.id);
         const unreleased = await tx.booking.findMany({ where: { eventId: event.id, status: 'CONFIRMED' } });
         if (unreleased.length) await tx.booking.updateMany({ where: { id: { in: unreleased.map(b => b.id) } }, data: { status: 'RELEASED', parkingZoneId: null } });
-        for (const _ of unreleased) await this.bookings.promote(tx, event.id);
+        while (await this.bookings.promote(tx, event.id)) { /* fill released seats */ }
         await tx.event.update({ where: { id: event.id }, data: { seatReleaseAt: null } });
       });
     }
