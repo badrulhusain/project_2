@@ -67,6 +67,18 @@ import { UsersService } from '../users/users.service.js';
     }
     return this.safe(await this.prisma.user.findUniqueOrThrow({ where: { id: userId }, include }));
   }
+  /** An attendee starts hosting events: creates their organization and upgrades the role. */
+  async becomeOrganizer(userId: string, organizationName: string) {
+    const name = organizationName.trim();
+    const current = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (current.role !== Role.USER) throw new ConflictException('You can already create events');
+    const slug = `${name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'organization'}-${randomUUID().slice(0, 8)}`;
+    const user = await this.prisma.$transaction(async tx => {
+      const organization = await tx.organization.create({ data: { name, slug } });
+      return tx.user.update({ where: { id: userId }, data: { role: Role.ORGANIZER, organizationId: organization.id }, include: { organization: { select: { id: true, name: true, slug: true } } } });
+    }, { maxWait: 30000, timeout: 60000 });
+    return { accessToken: this.token(user), user: this.safe(user) };
+  }
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() }, include: { organization: { select: { id: true, name: true, slug: true } } } });
     if (!user || !await bcrypt.compare(dto.password, user.passwordHash)) throw new UnauthorizedException('Invalid credentials');

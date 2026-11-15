@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { CalendarSearch, ChevronLeft, ChevronRight, LayoutDashboard, LogOut, Menu, Ticket, X } from 'lucide-react';
+import { CalendarSearch, ChevronLeft, Plus, ChevronRight, LayoutDashboard, LogOut, Menu, Ticket, X } from 'lucide-react';
 import { useState } from 'react';
 import { Wordmark } from './ui/wordmark';
 import { ThemeToggle } from './ui/theme-toggle';
@@ -27,6 +27,7 @@ export function UserShell({ children, user }: { children: React.ReactNode; user:
       <nav className="flex-1 space-y-2 p-4" aria-label="Attendee navigation">
         <p className={`mb-4 px-3 text-[10px] font-extrabold uppercase tracking-[.2em] text-muted ${collapsed ? 'lg:hidden' : ''}`}>My space</p>
         {links.map(item => <Link key={item.href} onClick={() => setMobileOpen(false)} href={item.href} title={item.label} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-bold transition ${isActive(item.href) ? 'border-2 border-[#141414] bg-[#F4E55A] text-[#141414] shadow-[3px_3px_0_#141414]' : 'border-2 border-transparent text-muted hover:bg-background hover:text-ink'}`}><item.icon size={19} strokeWidth={1.8} /><span className={collapsed ? 'lg:hidden' : ''}>{item.label}</span></Link>)}
+      {user.role === 'USER' && <Link href="/onboarding/organizer" onClick={() => setMobileOpen(false)} title="Create an event" className={`mt-6 flex min-h-11 items-center justify-center gap-2 rounded-xl border-2 border-[#141414] bg-[#141414] px-3 text-xs font-extrabold uppercase tracking-wide text-[#F4E55A] shadow-[3px_3px_0_#58695e] ${collapsed ? 'lg:px-0' : ''}`}><Plus size={17} /><span className={collapsed ? 'lg:hidden' : ''}>Create an event</span></Link>}
       </nav>
       <div className="border-t border-line p-4">
         <Link href="/" className="flex min-h-11 items-center gap-3 rounded-xl px-3 text-xs font-bold text-muted hover:bg-background"><ChevronLeft size={18} /><span className={collapsed ? 'lg:hidden' : ''}>View public site</span></Link>

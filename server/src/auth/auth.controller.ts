@@ -11,6 +11,7 @@ import { LoginDto, RegisterDto, RegisterOrganizationDto, NeonLoginDto, SetOrgani
   @Post('register-organization') @Throttle({ default: { ttl: 60000, limit: 5 } }) registerOrganization(@Body() dto: RegisterOrganizationDto) { return this.auth.registerOrganization(dto); }
   @Post('neon') @Throttle({ default: { ttl: 60000, limit: 10 } }) neon(@Body() dto: NeonLoginDto) { return this.auth.loginWithNeon(dto.token, dto.asOrganizer); }
   @Post('organization') @Protected(Role.ORGANIZER) setOrganization(@Body() dto: SetOrganizationDto, @Req() req: { user: AuthUser }) { return this.auth.setOrganization(req.user.id, dto.organizationName); }
+  @Post('become-organizer') @Protected() becomeOrganizer(@Body() dto: SetOrganizationDto, @Req() req: { user: AuthUser }) { return this.auth.becomeOrganizer(req.user.id, dto.organizationName); }
   @Post('login') @Throttle({ default: { ttl: 60000, limit: 5 } }) login(@Body() dto: LoginDto) { return this.auth.login(dto); }
   @Get('me') @Protected() me(@Req() req: { user: AuthUser }) { return this.auth.me(req.user.id); }
 }
