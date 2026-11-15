@@ -10,6 +10,7 @@ datasource db {
 
 enum Role {
   ADMIN
+  ORGANIZER
   USER
 }
 enum EventType {
@@ -63,9 +64,21 @@ model User {
   passwordHash String
   role Role @default(USER)
   createdAt DateTime @default(now())
+  organizationId String? @db.Uuid
+  organization Organization? @relation(fields: [organizationId], references: [id])
   events Event[]
   bookings Booking[]
   notifications Notification[]
+  @@index([organizationId])
+}
+
+model Organization {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  slug String @unique
+  createdAt DateTime @default(now())
+  users User[]
+  events Event[]
 }
 
 model Event {
@@ -88,6 +101,8 @@ model Event {
   status EventStatus @default(DRAFT)
   createdById String @db.Uuid
   createdBy User @relation(fields: [createdById], references: [id])
+  organizationId String? @db.Uuid
+  organization Organization? @relation(fields: [organizationId], references: [id])
   foodItems FoodItem[]
   parkingZones ParkingZone[]
   equipment Equipment[]
@@ -95,6 +110,7 @@ model Event {
   notifications Notification[]
   report EventReport?
   @@index([createdById])
+  @@index([organizationId])
   @@index([status, startAt])
 }
 
@@ -103,6 +119,7 @@ model FoodItem {
   eventId String @db.Uuid
   event Event @relation(fields: [eventId], references: [id])
   name String
+  imageUrl String?
   tag FoodTag
   unitCost Float?
   maxQuantity Int?

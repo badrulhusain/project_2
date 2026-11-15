@@ -27,7 +27,7 @@ import { lockEvent } from '../common/lock-event.js';
       return booking;
     }, { maxWait: 30000, timeout: 60000 });
   }
-  my(userId: string) { return this.prisma.booking.findMany({ where: { userId }, include: { event: true, foodOrder: { include: { items: true } } }, orderBy: { createdAt: 'desc' } }); }
+  my(userId: string) { return this.prisma.booking.findMany({ where: { userId }, include: { event: { include: { foodItems: true, parkingZones: true } }, parkingZone: true, foodOrder: { include: { items: true } } }, orderBy: { createdAt: 'desc' } }); }
   async getOwn(id: string, userId: string) { const booking = await this.prisma.booking.findUnique({ where: { id }, include: { event: true } }); if (!booking) throw new NotFoundException('Booking not found'); if (booking.userId !== userId) throw new ForbiddenException(); return booking; }
   async cancel(id: string, userId: string) {
     const booking = await this.getOwn(id, userId);

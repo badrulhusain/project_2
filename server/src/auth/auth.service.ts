@@ -1,13 +1,14 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { LoginDto, RegisterDto } from './dto.js';
+import { LoginDto, RegisterDto, RegisterOrganizationDto } from './dto.js';
 import { UsersService } from '../users/users.service.js';
 @Injectable() export class AuthService {
   constructor(private prisma: PrismaService, private jwt: JwtService, private users: UsersService) {}
-  private safe(user: { id: string; name: string; email: string; role: Role; createdAt: Date }) { const { id, name, email, role, createdAt } = user; return { id, name, email, role, createdAt }; }
+  private safe(user: { id: string; name: string; email: string; role: Role; createdAt: Date; organization?: { id: string; name: string; slug: string } | null }) { const { id, name, email, role, createdAt } = user; return { id, name, email, role, createdAt, organization: user.organization ?? null }; }
   private token(user: { id: string; email: string; role: Role }) { return this.jwt.sign({ sub: user.id, email: user.email, role: user.role }); }
   async register(dto: RegisterDto) {
     if (await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } })) throw new ConflictException('Email already registered');
@@ -15,8 +16,27 @@ import { UsersService } from '../users/users.service.js';
     const user = await this.prisma.user.create({ data: { name: dto.name, email: dto.email.toLowerCase(), passwordHash: await bcrypt.hash(dto.password, 12), role } });
     return { accessToken: this.token(user), user: this.safe(user) };
   }
+  async registerOrganization(dto: RegisterOrganizationDto) {
+    const email = dto.email.trim().toLowerCase();
+    const organizationName = dto.organizationName.trim();
+    const name = dto.name.trim();
+    if (await this.prisma.user.findUnique({ where: { email } })) throw new ConflictException('Email already registered');
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const baseSlug = organizationName.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'organization';
+    try {
+      const { user, organization } = await this.prisma.$transaction(async tx => {
+        const organization = await tx.organization.create({ data: { name: organizationName, slug: `${baseSlug}-${randomUUID().slice(0, 8)}` } });
+        const user = await tx.user.create({ data: { name, email, passwordHash, role: Role.ORGANIZER, organizationId: organization.id } });
+        return { user, organization };
+      }, { maxWait: 30000, timeout: 60000 });
+      return { accessToken: this.token(user), user: this.safe({ ...user, organization }) };
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') throw new ConflictException('Email already registered');
+      throw error;
+    }
+  }
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() }, include: { organization: { select: { id: true, name: true, slug: true } } } });
     if (!user || !await bcrypt.compare(dto.password, user.passwordHash)) throw new UnauthorizedException('Invalid credentials');
     return { accessToken: this.token(user), user: this.safe(user) };
   }

@@ -16,6 +16,23 @@ import { PrismaService } from '../prisma/prisma.service.js';
     if (!cloud_name || !api_key || !api_secret) throw new ServiceUnavailableException('Media storage is not configured');
     cloudinary.config({ cloud_name, api_key, api_secret, secure: true });
   }
+  signature(folder: 'events' | 'food') {
+    this.configure();
+    const cloudName = this.config.getOrThrow<string>('CLOUDINARY_CLOUD_NAME');
+    const apiKey = this.config.getOrThrow<string>('CLOUDINARY_API_KEY');
+    const apiSecret = this.config.getOrThrow<string>('CLOUDINARY_API_SECRET');
+    const timestamp = Math.floor(Date.now() / 1000);
+    const path = `eventsense/${folder}`;
+    const publicId = randomUUID();
+    const signature = cloudinary.utils.api_sign_request({ timestamp, folder: path, public_id: publicId }, apiSecret);
+    return { cloudName, apiKey, timestamp, folder: path, publicId, signature };
+  }
+  async deleteUpload(publicId: string) {
+    this.configure();
+    if (!/^eventsense\/(events|food)\/[A-Za-z0-9_-]+$/.test(publicId)) throw new BadRequestException('Invalid media identifier');
+    if (await this.prisma.event.findFirst({ where: { imagePublicId: publicId } })) throw new BadRequestException('Attached event media must be removed through the event');
+    return cloudinary.uploader.destroy(publicId);
+  }
   private validate(file?: Express.Multer.File) {
     if (!file?.buffer?.length) throw new BadRequestException('Image file is required');
     const bytes = file.buffer;

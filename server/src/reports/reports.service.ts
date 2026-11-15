@@ -28,7 +28,14 @@ import { CalibrationService } from '../calibration/calibration.service.js';
   }
   async report(eventId: string, userId: string) { await this.events.own(eventId, userId); const report = await this.prisma.eventReport.findUnique({ where: { eventId } }); if (!report) throw new NotFoundException('Report not found'); return report; }
   async savings(userId: string) {
-    const reports = await this.prisma.eventReport.findMany({ where: { event: { createdById: userId, status: 'CLOSED' } } });
-    return { events: reports.length, mealsSaved: reports.reduce((sum, r) => sum + Number((r.actualJson as Record<string, unknown>).mealsSaved ?? 0), 0) };
+    const owner = (await this.events.isAdmin(userId)) ? {} : { createdById: userId };
+    const reports = await this.prisma.eventReport.findMany({ where: { event: { ...owner, status: 'CLOSED' } } });
+    const [events, totalBookings] = await Promise.all([this.prisma.event.count({ where: owner }), this.prisma.booking.count({ where: { event: owner } })]);
+    const avgSeatUtilization = reports.length ? reports.reduce((sum, r) => sum + Number((r.actualJson as Record<string, unknown>).seatUtilization ?? 0), 0) / reports.length : 0;
+    const peakKwHeadroom = reports.reduce((sum, r) => {
+      const power = (r.plannedJson as Record<string, unknown>).power as Record<string, unknown> | undefined;
+      return sum + Math.max(0, Number(power?.headroomKw ?? 0));
+    }, 0);
+    return { events, closedEvents: reports.length, totalBookings, mealsSaved: reports.reduce((sum, r) => sum + Number((r.actualJson as Record<string, unknown>).mealsSaved ?? 0), 0), avgSeatUtilization, peakKwHeadroom };
   }
 }

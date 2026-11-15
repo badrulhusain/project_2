@@ -1,0 +1,3 @@
+'use client';
+import { RotateCcw, TriangleAlert } from 'lucide-react';
+export default function Error({reset}:{error:Error;reset:()=>void}){return <main className="container-page flex min-h-[65vh] flex-col items-center justify-center py-20 text-center"><TriangleAlert size={34} className="text-negative"/><h1 className="font-display mt-5 text-4xl font-bold">Something got tangled.</h1><p className="mt-3 max-w-md text-sm text-muted">We couldn&apos;t load this part of EventSense. Give it another try.</p><button onClick={reset} className="btn btn-primary mt-7"><RotateCcw size={16}/> Try again</button></main>}

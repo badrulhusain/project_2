@@ -1,0 +1,93 @@
+ROLE
+You are a senior product designer + Next.js engineer. Build the complete client for "EventSense" in my existing Next.js project. UI quality is the top priority: it must look like a polished, distinctive product, not a template. Work in vertical slices, run the app after each slice, fix type/lint errors, and never leave placeholder lorem or broken routes. Ask me nothing; choose sensible defaults and list assumptions in the README.
+
+PRODUCT
+EventSense is a campus event platform that fixes miscalculation of food, seating, parking and electricity. Attendees browse events, book a seat, pre-order food, pick a parking zone, get a QR ticket and timed notifications. Admins create events and use a Smart Planner that turns bookings into an attendance forecast with food, seat, parking and power recommendations, run QR check-in and food collection on the day, and read a planned-vs-actual report with a savings dashboard.
+
+STACK
+Next.js (App Router, TypeScript strict), Tailwind CSS, shadcn/ui (Radix), lucide-react, TanStack Query, react-hook-form + zod, Recharts, Framer Motion, sonner (toasts), next/font, @yudiel/react-qr-scanner (admin scanning), next-themes (light + dark).
+Backend: NestJS REST API at NEXT_PUBLIC_API_URL (prefix /api), JWT auth, Swagger JSON at {API}/docs-json. FIRST step: generate typed API types with `openapi-typescript` from /docs-json into src/lib/api-types.ts and build a typed fetch client (src/lib/api.ts) with error normalization {statusCode,message}. If the schema is unreachable, hand-write types from the endpoint list below.
+Images: Cloudinary signed direct upload. Component <ImageUploader folder="events|food"> calls GET /api/uploads/signature, uploads straight to Cloudinary, returns the secure URL; show progress, preview, remove. Render all remote images with next/image (configure remotePatterns for res.cloudinary.com) and always provide a graceful fallback (gradient + icon) when no image.
+Auth: store the JWT in an httpOnly cookie through Next route handlers (/app/api/auth/login|logout|me) that proxy the backend; middleware.ts protects /me/* (logged in) and /admin/* (role ADMIN). Server components may read the cookie; client calls go through a thin proxy or attach the token safely. Redirect back to the intended page after login.
+
+DESIGN DIRECTION  ("warm editorial campus": confident, calm, human; NOT purple-gradient SaaS)
+- Palette (define as CSS variables + Tailwind tokens, with a matching dark theme):
+  background #FAF7F2 (warm paper), surface #FFFFFF, ink #14201B, muted text #5B6B63, border #E7E1D6,
+  primary forest #0F5C4D (hover #0B4A3E), accent saffron #F2A33A, info sky #3B82F6 used sparingly,
+  success #1F9D6B, warning #E8A317, danger coral #E5533D. Use saffron only for highlights and key numbers.
+- Typography via next/font: headings "Bricolage Grotesque" (600-700, tight tracking), body "DM Sans", numbers/KPIs/QR codes "JetBrains Mono" with tabular-nums. Clear scale: display 48-64, h1 36, h2 28, h3 20, body 16, small 14.
+- Shape and depth: 16px radius cards, 12px inputs/buttons, hairline borders, very soft layered shadows, generous whitespace (8px grid). Subtle paper-grain or dotted background texture on hero only.
+- Motion (Framer Motion, restrained): staggered fade-up on lists, number count-up on KPIs, animated progress meters, smooth tab/step transitions, hover lift on event cards. Respect prefers-reduced-motion.
+- Icons: lucide only, consistent 1.75 stroke. Micro-copy is friendly and specific ("12 seats left, going fast"), never generic.
+- Fully responsive: attendee side is mobile-first (thumb-friendly 44px targets, sticky bottom CTA on the booking flow); admin side is desktop-first with a collapsible sidebar and works on tablets.
+
+PAGES AND FLOWS
+
+PUBLIC / ATTENDEE
+1. / Landing: hero with strong headline ("Plan less. Waste less. Show up."), live upcoming-events strip, 3-step "how it works", a small stat band (seats, meals, kW saved if available from /admin/savings, otherwise hide), footer.
+2. /events: filter bar (search, type chips, date, free/paid), responsive card grid. Event card: cover image, type badge, date block, venue, a seat meter ("48 / 120") with color states (green <70%, amber 70-90%, coral >90%, "Waitlist" when full), parking hint. Skeletons while loading.
+3. /events/[id]: cover hero, key facts, description, schedule, venue, live seat meter, parking availability per zone, menu preview with images and veg/non-veg/halal tags. Right (desktop) / bottom sheet (mobile) booking card with a 4-step flow: (1) Seat: confirm seat or join waitlist (explain waitlist clearly). (2) Food: menu list with image, tag, quantity stepper (1-10), running summary, cutoff countdown; skippable. (3) Parking: zone cards with vehicle type and live availability, skippable. (4) Review and confirm. On success: confetti-free elegant success state with the QR ticket, "Add to calendar" (.ics), and next steps. Handle: not logged in (login prompt that returns here), cutoffs passed, sold out, 409 conflicts, and editing food order before cutoff.
+4. /me: tabs "Upcoming", "Past", "Notifications". Ticket cards show status chip (CONFIRMED, WAITLISTED with position, CHECKED_IN, CANCELLED). /me/bookings/[id]: large QR (data URL from GET /bookings/:id/ticket) on a ticket-shaped card with perforated edge styling, food order list with collected status, parking zone, cancel booking (confirm dialog), edit food order, and a notifications timeline for that event.
+5. /login and /register: split layout, form validation, friendly errors. Register has a collapsed "Organizer? Enter admin code" field.
+
+ADMIN (/admin, role ADMIN)
+Layout: left sidebar (Dashboard, Events, Notifications, Settings-less), top bar with theme toggle and user menu.
+1. /admin Dashboard: KPI cards with count-up (events, total bookings, meals saved, avg seat utilization, peak kW avoided) from GET /admin/savings; "Needs attention" list (events with OVER/TIGHT seats, power WARNING/OVERLOAD, food SHORTAGE_RISK); upcoming events table.
+2. /admin/events: table with status chips, search, actions. "New event" button.
+3. /admin/events/new and /admin/events/[id]/edit: multi-step wizard with progress rail and autosaved draft: Basics (title, type, free/paid, description, cover via ImageUploader) -> Venue and capacity (venue, capacity, safety limit with live "effective capacity" hint, power limit kW) -> Schedule (start, end, booking cutoff, food cutoff, seat release time) -> Menu (add items with image, tag, optional cost and max qty) -> Parking zones -> Equipment (preset chips: AC, Projector, Sound system, Stage lights, Kitchen; editable watts/count/time window/occupancy-scaled toggle; live total-kW preview) -> Review and publish. Validate every step with zod; inline errors.
+4. /admin/events/[id] with tabs:
+   a. Overview: status, key facts, publish/close actions, shareable public link with copy button.
+   b. PLANNER (the signature screen, make it exceptional): GET /events/:id/planner.
+      - Hero strip: "Expected attendance" with a range band visual (low - likely - high) over a capacity line and safety-limit marker, plus plain-English explanation text from the API.
+      - Seats card: radial or bar meter vs effective capacity, status chip (OK/TIGHT/OVER), suggestion text.
+      - Food card: table per item with image, ordered, recommended, low-high range bar, risk chip (WASTE_RISK/BALANCED/SHORTAGE_RISK). A "Manual guess vs EventSense" comparison panel with meals saved and cost saved (count-up).
+      - Parking card: per-zone meters and status.
+      - Power card: Recharts area chart of load over time with a dashed power-limit line, shaded danger zone above it, peak annotation, headroom number, status chip, recommendation text.
+      - A "Recalculate" button + auto refetch every 15s; skeleton and error states; empty states when there are no bookings/equipment/menu ("Add equipment to see the power plan").
+   c. Attendees: searchable table (name, email, status, parking, food summary, check-in time), export CSV.
+   d. Food: orders by item, collected vs ordered progress.
+   e. Notifications: composer (title, body, type, send now / schedule), list with sent/pending state.
+   f. Live ops: big counters (checked in, food collected, seats left) polling every 5s, plus a link to the scan screen.
+   g. Report (after close): planned vs actual side-by-side for attendance, food per item, seats, parking, power; savings summary; "model recalibrated" note showing updated rates.
+5. /admin/events/[id]/scan: full-screen, mobile-friendly. Two modes toggle: "Check-in" and "Food collection". Camera QR scan (with manual token input fallback). Check-in shows attendee name + big success/failure state with haptic-like animation and sound-free feedback. Food collection shows ordered items with steppers to confirm quantities collected. Show recent scans list.
+
+SHARED COMPONENTS (build once, reuse)
+EventCard, SeatMeter, StatusChip, KpiCard (count-up), RangeBand, RiskChip, QuantityStepper, StepWizard, ImageUploader, EmptyState, ErrorState, Skeletons, ConfirmDialog, DataTable, CopyButton, CountdownBadge, QrTicketCard, PowerChart.
+
+UX QUALITY BAR
+- Every list has loading skeletons, empty state with a helpful CTA, and error state with retry.
+- Optimistic UI where safe; toasts for results; disable buttons while submitting; prevent double-submits.
+- Accessible: semantic HTML, labelled inputs, focus rings, keyboard navigation for the wizard and tables, AA contrast in both themes, aria-live for scan results and toasts.
+- Use dates in the user's locale (Asia/Kolkata default), relative times ("starts in 2 days"), and consistent units (kW, meals).
+- SEO/meta per page, favicon, Open Graph image for events, custom 404 and error pages.
+- Performance: server components for static/public data, next/image, route-level loading.tsx, no unnecessary client JS.
+
+ENDPOINT CONTRACT (backend prefix /api; prefer generated types if they differ)
+Auth: POST /auth/register, POST /auth/login, GET /auth/me
+Events: GET /events, GET /events/:id, GET /admin/events, POST /events, PATCH /events/:id, POST /events/:id/publish, POST /events/:id/close
+Config: POST/GET/DELETE /events/:id/food-items | /parking-zones | /equipment
+Bookings: POST /events/:id/bookings, GET /me/bookings, DELETE /bookings/:id, GET /bookings/:id/ticket
+Food: PUT/GET /bookings/:id/food-order
+Planner: GET /events/:id/planner
+Ops: POST /checkin, POST /food-collect
+Notifications: POST/GET /events/:id/notifications
+Reports: GET /events/:id/report, GET /admin/savings
+Uploads: GET /uploads/signature?folder=events|food
+Health: GET /health
+
+BUILD ORDER (verify each in the browser)
+1. Project setup: fonts, Tailwind tokens (light + dark), shadcn components, providers (Query, Theme, Toaster), api client + generated types, env, middleware.
+2. Layouts: public header/footer, attendee shell, admin shell with sidebar.
+3. Auth pages + cookie proxy + route protection.
+4. Events list + event detail (public data first, live meters).
+5. Booking flow (seat -> food -> parking -> confirm) + ticket page with QR.
+6. /me dashboard and notifications.
+7. Admin event wizard + ImageUploader (Cloudinary).
+8. Admin Planner tab (signature screen), then Attendees/Food/Notifications/Live tabs.
+9. Scan screen (check-in and food collection).
+10. Close event + Report page + admin dashboard KPIs.
+11. Polish: empty/error/loading states, responsive pass at 375/768/1280, dark mode pass, accessibility pass, Lighthouse check.
+12. README: setup, env vars (NEXT_PUBLIC_API_URL, cookie settings), scripts, folder structure, assumptions.
+
+DEFINITION OF DONE
+`npm run build` passes with no type or lint errors; the full demo path works against the seeded backend: register -> browse -> book seat + food + parking -> see QR -> admin login -> open Planner on the seeded 400-booking event (all five cards render with real data) -> scan check-in -> close event -> view report. At the end, print the route map and a list of any assumptions or backend mismatches found.

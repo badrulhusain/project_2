@@ -1,0 +1,1 @@
+export default function Loading(){return <div className="container-page space-y-5 py-14"><div className="skeleton h-8 w-32"/><div className="skeleton h-16 max-w-xl"/><div className="grid gap-5 md:grid-cols-3"><div className="skeleton h-72"/><div className="skeleton h-72"/><div className="skeleton h-72"/></div></div>}

@@ -30,3 +30,22 @@
 - The Cloudinary smoke test exercised a real upload and removal, but no user-supplied image was uploaded.
 - SMTP delivery was not exercised because SMTP credentials were not supplied; the Outbox fallback remains available.
 - The server was started locally for verification. It has not been deployed.
+
+## Client and API integration (2026-11-15)
+
+- Added the Next.js 16 client in `client`, its full source specification in `context/client-specification.txt`, and setup notes in `client/README.md`.
+- Generated `client/src/lib/api-types.ts` from the running Nest Swagger JSON. Added a same origin cookie proxy and public, attendee, and organizer routes.
+- Added migration `20261115010000_food_images` on the supplied Neon development branch. Food items now have optional Cloudinary image URLs. Added signed direct upload parameters, an attendee list endpoint, richer savings and event list responses, and config update endpoints for the organizer editor.
+- `client npm run build` passed. The server build passed after the integration changes.
+- HTTP smoke checks returned 200 for `/`, `/events`, `/login`, and the protected planner and ticket pages. `/admin` redirected unauthenticated visitors.
+- Cookie login through the client proxy returned the seeded admin. The 400 booking Fest planner returned 288 likely attendance, 337 recommended meals, 2 parking zones, and 16 power points.
+- Registered a new attendee through the client, booked a seat and parking, and retrieved a QR ticket. A Neon latency issue initially caused food ordering to time out; increased the Prisma food transaction timeout to 60 seconds and verified a food order succeeds. Scanned an existing attendee ticket for check-in and collected one meal through the client proxy.
+- Computer use had no browser or native app surface available, so viewport screenshots and Lighthouse could not be run here. No deployment was performed.
+
+## Empty Neon reset and local startup (2026-11-15)
+
+- Diagnosed `EADDRINUSE`: a separate Next.js `next start` process, not NestJS, was listening on port 3000. Stopped the API watcher left from verification; kept the separate client process untouched.
+- Verified `.env` targets the exact supplied Neon `development` branch, direct host, database `neondb`, and pooled runtime host. Ran the guarded `server/scripts/reset-development-db.mjs --reset-public-schema` against that development branch.
+- Applied `20261115000000_initial` and `20261115010000_food_images` with `npx prisma migrate deploy` using the direct URL. `prisma migrate status` reported up to date. Prisma Client generation and the Nest build passed.
+- Confirmed zero rows in User, Event, Booking, FoodOrder, FoodOrderItem, Notification, Outbox, CalibrationStat, and EventReport. No seed was run, so the earlier demo credentials and events are absent.
+- Set local `server/.env` to `PORT=3002` and `client/.env.local` to `NEXT_PUBLIC_API_URL=http://localhost:3002/api`. Updated examples and docs. The user's existing VS Code `npm run start:dev` watcher picked up the new port and is the API listener on 3002; separate verification watchers were stopped. `/api/health` returned `ok`, `/docs-json` returned 200, and `/api/events` returned an empty list. The client proxy on port 3001 returned `ok` from the API health endpoint and an empty event list before its verification process was stopped.

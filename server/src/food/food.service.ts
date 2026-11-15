@@ -27,7 +27,7 @@ import { lockEvent } from '../common/lock-event.js';
         await tx.foodOrder.delete({ where: { bookingId } });
       }
       return tx.foodOrder.create({ data: { bookingId, items: { create: dto.items } }, include: { items: true } });
-    });
+    }, { maxWait: 30000, timeout: 60000 });
   }
   async get(bookingId: string, userId: string) {
     const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });

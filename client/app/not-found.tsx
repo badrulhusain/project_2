@@ -1,0 +1,3 @@
+import Link from 'next/link';
+import { ArrowLeft, Compass } from 'lucide-react';
+export default function NotFound(){return <main className="container-page flex min-h-[70vh] flex-col items-center justify-center py-20 text-center"><span className="mb-6 flex size-20 items-center justify-center rounded-[22px] bg-[#E8F1E8] text-forest dark:bg-[#254332]"><Compass size={34}/></span><span className="eyebrow">A SMALL DETOUR · 404</span><h1 className="font-display mt-3 text-5xl font-bold">This page slipped away.</h1><p className="mt-4 max-w-md text-sm leading-7 text-muted">The event or page may have moved. There are more good things to find on the calendar.</p><Link href="/events" className="btn btn-primary mt-8"><ArrowLeft size={17}/> Explore events</Link></main>}

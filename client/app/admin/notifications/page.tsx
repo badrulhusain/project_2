@@ -1,0 +1,7 @@
+import Link from 'next/link';
+import { Bell, ArrowRight } from 'lucide-react';
+import { cookies } from 'next/headers';
+import { serverApi } from '@/src/lib/api';
+import type { Event } from '@/src/lib/types';
+import { dateOnly } from '@/src/lib/utils';
+export default async function Page(){const token=(await cookies()).get('eventsense_token')?.value;const events=await serverApi<Event[]>('/api/admin/events',token);return <div><span className="eyebrow">COMMUNICATIONS</span><h1 className="font-display mt-2 text-5xl font-bold">Notifications<span className="text-saffron">.</span></h1><p className="mt-3 text-sm text-muted">Choose an event to write or schedule an update.</p><div className="mt-9 grid gap-4 md:grid-cols-2">{events.map(event=><Link key={event.id} href={`/admin/events/${event.id}?tab=notifications`} className="card flex items-center gap-4 p-5 hover:-translate-y-1"><span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-[#E8F1E8] text-forest dark:bg-[#254332]"><Bell size={21}/></span><span className="min-w-0 flex-1"><strong className="block truncate">{event.title}</strong><span className="mt-1 block text-xs text-muted">{dateOnly(event.startAt)} · {event.venue}</span></span><ArrowRight className="text-forest" size={17}/></Link>)}</div>{!events.length&&<p className="mt-8 text-sm text-muted">Create an event first, then keep attendees in the loop.</p>}</div>}

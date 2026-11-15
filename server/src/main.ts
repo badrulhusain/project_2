@@ -14,6 +14,6 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpErrorFilter());
   const swagger = new DocumentBuilder().setTitle('EventSense API').setVersion('1.0').addBearerAuth().build();
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swagger));
-  await app.listen(Number(process.env.PORT ?? 3000));
+  await app.listen(Number(process.env.PORT ?? 3002));
 }
 await bootstrap();

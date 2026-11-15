@@ -8,17 +8,26 @@ NestJS 12, Prisma 6, PostgreSQL. All HTTP routes use `/api`; OpenAPI is at `/doc
 2. `npm ci --legacy-peer-deps`
 3. `npx prisma migrate deploy`
 4. `npm run db:seed` on a fresh database only
-5. `npm run start:dev`
+5. `npm run start:dev` (API at `http://localhost:3002/api/health`)
+
+For the already configured workspace on Windows PowerShell, run:
+
+```powershell
+cd C:\Users\Acer\coding\hacks\project_2\server
+npm run start:dev
+```
+
+The gitignored `.env` already sets `PORT=3002` and contains the Neon connection strings. Port 3000 is used by a separate Next.js client process. Start only one server watcher at a time; use Ctrl+C in its terminal before starting another. After schema changes, run `npx prisma migrate deploy` and `npx prisma generate` from this folder. Do not run the seed unless demo records are wanted.
 
 Run `npm test` for forecast unit tests. For the database-backed suite, migrate a separate test database or schema, set `TEST_DATABASE_URL` to its URL, then run `npm run test:e2e`. The API requires PostgreSQL at startup, including `/api/health`.
 
-The supplied Neon development branch has already been migrated and seeded. Its connection strings and Cloudinary credentials are stored only in gitignored `server/.env`. Do not rerun the seed there without first clearing its existing demo data.
+The supplied Neon development branch has been reset and migrated. It is empty by request; no demo accounts or events exist until you create them or explicitly run `npm run db:seed`. Its connection strings and Cloudinary credentials are stored only in gitignored `server/.env`.
 
-The demo admin is `admin@eventsense.dev` / `Admin@123`. Change this password outside local development. The seed creates five login-ready students with password `Student@123`, 395 additional demo attendees, and two events. Run seed once against a fresh database.
+If you explicitly run `npm run db:seed`, the demo admin will be `admin@eventsense.dev` / `Admin@123`. Change this password outside local development. The seed creates five login-ready students with password `Student@123`, 395 additional demo attendees, and two events. The current Neon database has **not** been reseeded.
 
 ## Environment
 
-`DATABASE_URL` is the pooled PostgreSQL connection string for the API. `DATABASE_URL_UNPOOLED` is the direct connection used by Prisma migrations. `JWT_SECRET` signs bearer tokens. `JWT_EXPIRES_IN` defaults to `1d`. `CLIENT_URL` is the allowed browser origin. `ADMIN_SIGNUP_CODE` permits an admin registration. `PORT` defaults to `3000`. Set all `SMTP_*` variables to send email; without an SMTP host/from address, emails are logged and saved in `Outbox`. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` to enable event image uploads.
+`DATABASE_URL` is the pooled PostgreSQL connection string for the API. `DATABASE_URL_UNPOOLED` is the direct connection used by Prisma migrations. `JWT_SECRET` signs bearer tokens. `JWT_EXPIRES_IN` defaults to `1d`. `CLIENT_URL` is the allowed browser origin. `ADMIN_SIGNUP_CODE` permits an admin registration. `PORT` is set to `3002` locally to avoid the Next.js client on port 3000. Set all `SMTP_*` variables to send email; without an SMTP host/from address, emails are logged and saved in `Outbox`. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` to enable event image uploads.
 
 ## Routes
 
@@ -57,7 +66,7 @@ Event media is a single cover image per event. The upload accepts JPEG, PNG, or 
 
 ## Demo flow
 
-1. Log in as the demo admin and use the access token in Swagger.
+1. On a disposable database, run `npm run db:seed`. Log in as the demo admin and use the access token in Swagger.
 2. Fetch `GET /api/admin/events`; open the Campus Innovation Fest planner.
 3. Get a student booking from `GET /api/me/bookings` using a student login, then present the ticket QR token to the admin.
 4. Admin sends `POST /api/checkin`, then `POST /api/events/:id/close`.
