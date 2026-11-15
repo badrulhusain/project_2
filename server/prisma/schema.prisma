@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+enum EventType {
+  SEMINAR
+  WORKSHOP
+  CULTURAL
+  SPORTS
+  FEST
+  OTHER
+}
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  LIVE
+  CLOSED
+}
+enum FoodTag {
+  VEG
+  NON_VEG
+  HALAL
+  VEGAN
+}
+enum VehicleType {
+  TWO_WHEELER
+  FOUR_WHEELER
+}
+enum BookingStatus {
+  CONFIRMED
+  WAITLISTED
+  CANCELLED
+  RELEASED
+  CHECKED_IN
+}
+enum NotificationType {
+  INFO
+  FOOD
+  SCHEDULE
+  PARKING
+  ALERT
+}
+enum OutboxStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  name String
+  email String @unique
+  passwordHash String
+  role Role @default(USER)
+  createdAt DateTime @default(now())
+  events Event[]
+  bookings Booking[]
+  notifications Notification[]
+}
+
+model Event {
+  id String @id @default(uuid()) @db.Uuid
+  title String
+  description String
+  venue String
+  imageUrl String?
+  imagePublicId String?
+  startAt DateTime
+  endAt DateTime
+  type EventType
+  isPaid Boolean @default(false)
+  capacity Int
+  safetyLimit Int
+  powerLimitKw Float
+  bookingCutoffAt DateTime
+  foodCutoffAt DateTime
+  seatReleaseAt DateTime?
+  status EventStatus @default(DRAFT)
+  createdById String @db.Uuid
+  createdBy User @relation(fields: [createdById], references: [id])
+  foodItems FoodItem[]
+  parkingZones ParkingZone[]
+  equipment Equipment[]
+  bookings Booking[]
+  notifications Notification[]
+  report EventReport?
+  @@index([createdById])
+  @@index([status, startAt])
+}
+
+model FoodItem {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @db.Uuid
+  event Event @relation(fields: [eventId], references: [id])
+  name String
+  tag FoodTag
+  unitCost Float?
+  maxQuantity Int?
+  orderItems FoodOrderItem[]
+  @@index([eventId])
+}
+
+model ParkingZone {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @db.Uuid
+  event Event @relation(fields: [eventId], references: [id])
+  name String
+  vehicleType VehicleType
+  capacity Int
+  bookings Booking[]
+  @@index([eventId])
+}
+
+model Equipment {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @db.Uuid
+  event Event @relation(fields: [eventId], references: [id])
+  name String
+  watts Int
+  count Int
+  startAt DateTime
+  endAt DateTime
+  occupancyScaled Boolean @default(false)
+  @@index([eventId])
+}
+
+model Booking {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @db.Uuid
+  event Event @relation(fields: [eventId], references: [id])
+  userId String @db.Uuid
+  user User @relation(fields: [userId], references: [id])
+  status BookingStatus
+  waitlistPosition Int?
+  qrToken String @unique
+  parkingZoneId String? @db.Uuid
+  parkingZone ParkingZone? @relation(fields: [parkingZoneId], references: [id])
+  checkedInAt DateTime?
+  createdAt DateTime @default(now())
+  foodOrder FoodOrder?
+  @@unique([eventId, userId])
+  @@index([eventId, status])
+  @@index([userId])
+  @@index([parkingZoneId])
+}
+
+model FoodOrder {
+  id String @id @default(uuid()) @db.Uuid
+  bookingId String @unique @db.Uuid
+  booking Booking @relation(fields: [bookingId], references: [id])
+  createdAt DateTime @default(now())
+  items FoodOrderItem[]
+}
+
+model FoodOrderItem {
+  id String @id @default(uuid()) @db.Uuid
+  orderId String @db.Uuid
+  order FoodOrder @relation(fields: [orderId], references: [id])
+  foodItemId String @db.Uuid
+  foodItem FoodItem @relation(fields: [foodItemId], references: [id])
+  quantity Int
+  collectedQty Int @default(0)
+  @@unique([orderId, foodItemId])
+  @@index([foodItemId])
+}
+
+model Notification {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @db.Uuid
+  event Event @relation(fields: [eventId], references: [id])
+  title String
+  body String
+  type NotificationType
+  scheduledAt DateTime
+  sentAt DateTime?
+  createdById String @db.Uuid
+  createdBy User @relation(fields: [createdById], references: [id])
+  recipientUserId String? @db.Uuid
+  @@index([eventId])
+  @@index([recipientUserId])
+  @@index([scheduledAt, sentAt])
+}
+
+model Outbox {
+  id String @id @default(uuid()) @db.Uuid
+  to String
+  subject String
+  body String
+  status OutboxStatus @default(PENDING)
+  createdAt DateTime @default(now())
+}
+
+model CalibrationStat {
+  id String @id @default(uuid()) @db.Uuid
+  eventType EventType
+  isPaid Boolean
+  showRate Float
+  walkInRate Float
+  claimRate Float
+  samples Int @default(0)
+  @@unique([eventType, isPaid])
+}
+
+model EventReport {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @unique @db.Uuid
+  event Event @relation(fields: [eventId], references: [id])
+  plannedJson Json
+  actualJson Json
+  createdAt DateTime @default(now())
+}

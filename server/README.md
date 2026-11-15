@@ -1,126 +1,64 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# EventSense API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS 12, Prisma 6, PostgreSQL. All HTTP routes use `/api`; OpenAPI is at `/docs`.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Setup
 
-## Description
+1. Copy `.env.example` to `.env` and set the pooled PostgreSQL URL, direct migration URL, and strong secrets.
+2. `npm ci --legacy-peer-deps`
+3. `npx prisma migrate deploy`
+4. `npm run db:seed` on a fresh database only
+5. `npm run start:dev`
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Run `npm test` for forecast unit tests. For the database-backed suite, migrate a separate test database or schema, set `TEST_DATABASE_URL` to its URL, then run `npm run test:e2e`. The API requires PostgreSQL at startup, including `/api/health`.
 
-## Project setup
+The supplied Neon development branch has already been migrated and seeded. Its connection strings and Cloudinary credentials are stored only in gitignored `server/.env`. Do not rerun the seed there without first clearing its existing demo data.
 
-```bash
-$ npm install
-```
+The demo admin is `admin@eventsense.dev` / `Admin@123`. Change this password outside local development. The seed creates five login-ready students with password `Student@123`, 395 additional demo attendees, and two events. Run seed once against a fresh database.
 
-## Compile and run the project
+## Environment
 
-```bash
-# development
-$ npm run start
+`DATABASE_URL` is the pooled PostgreSQL connection string for the API. `DATABASE_URL_UNPOOLED` is the direct connection used by Prisma migrations. `JWT_SECRET` signs bearer tokens. `JWT_EXPIRES_IN` defaults to `1d`. `CLIENT_URL` is the allowed browser origin. `ADMIN_SIGNUP_CODE` permits an admin registration. `PORT` defaults to `3000`. Set all `SMTP_*` variables to send email; without an SMTP host/from address, emails are logged and saved in `Outbox`. Set `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` to enable event image uploads.
 
-# watch mode
-$ npm run start:dev
+## Routes
 
-# production mode
-$ npm run start:prod
-```
+| Method | Route | Access |
+| --- | --- | --- |
+| POST | `/api/auth/register`, `/api/auth/login` | Public |
+| GET | `/api/auth/me` | Signed in |
+| GET | `/api/health` | Public |
+| POST, PATCH | `/api/events`, `/api/events/:id` | Admin owner |
+| POST | `/api/events/:id/publish` | Admin owner |
+| GET | `/api/events`, `/api/events/:id` | Public |
+| GET | `/api/admin/events` | Admin |
+| POST, DELETE | `/api/events/:id/media` | Admin owner; multipart image upload or removal |
+| POST, GET, DELETE | `/api/events/:id/food-items`, `/parking-zones`, `/equipment` | Admin writes; public reads |
+| POST | `/api/events/:id/bookings` | Signed in |
+| GET | `/api/me/bookings`, `/api/bookings/:id/ticket` | Booking owner |
+| DELETE | `/api/bookings/:id` | Booking owner |
+| PUT, GET | `/api/bookings/:id/food-order` | Booking owner |
+| GET | `/api/events/:id/planner` | Admin owner |
+| POST | `/api/checkin`, `/api/food-collect` | Admin owner |
+| POST, GET | `/api/events/:id/notifications` | Admin owner writes; active booker reads |
+| POST, GET | `/api/events/:id/close`, `/api/events/:id/report` | Admin owner |
+| GET | `/api/admin/savings` | Admin |
 
-## Run tests
+## Forecast and assumptions
 
-```bash
-# unit tests
-$ npm run test
+Effective capacity is `min(capacity, safetyLimit)`. The attendance likely estimate is `round(booked × showRate + booked × walkInRate)`, with a 1.65 standard deviation band on the show count. Free defaults are 0.62 show, 0.10 walk-in, and 0.75 food claim; paid defaults are 0.93, 0.05, and 0.85. Saved calibration values override them.
 
-# e2e tests
-$ npm run test:e2e
+Food recommendations use `ceil((ordered × claimRate + proportional walk-ins × 0.5) × 1.05)`. The planner's `mealsSaved` compares this recommendation with a manual guess of one meal per confirmed booking. At closure, actual `mealsSaved` is `max(0, booked - total collected meals)`. This is an estimate, not a financial ledger. `estimatedCostSaved` uses the unit cost only where provided. Power samples every 30 minutes; occupancy-scaled equipment uses at least 30% load.
 
-# test coverage
-$ npm run test:cov
-```
+Booking and food stock operations lock the event row in PostgreSQL. A waitlisted booking can keep a preferred parking zone, but promotion drops that preference if the zone has filled. Cancellation keeps the unique event/user booking record, so the same account cannot rebook after cancellation. Seat release runs once and clears `seatReleaseAt`. Only `CONFIRMED` tickets can be checked in, and food is collectable after check-in.
 
-## Deployment
+The model has no walk-in record, so observed walk-in rate remains at its prior calibration value on closure. Passwords and tokens are never returned together; ticket QR encodes a random token. The development seed deliberately creates hundreds of users and orders and can take a little time.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+Event media is a single cover image per event. The upload accepts JPEG, PNG, or WebP up to 5 MB, stores it in Cloudinary, and saves its HTTPS URL and public ID on the Event row. Replacing or deleting an image removes the prior asset. Public event responses include `imageUrl`.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Demo flow
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-This project is already instrumented. To connect it, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
-
-```bash
-$ npx @nestjs/observe link
-```
-
-It writes the app key and secret into `.env` and makes every `nest start` script (`start`, `start:dev`, `start:debug`) load it. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
-
-Or do it by hand: create an application and an API key at [observe.nestjs.com](https://observe.nestjs.com), and set the pair as `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment the app runs in.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+1. Log in as the demo admin and use the access token in Swagger.
+2. Fetch `GET /api/admin/events`; open the Campus Innovation Fest planner.
+3. Get a student booking from `GET /api/me/bookings` using a student login, then present the ticket QR token to the admin.
+4. Admin sends `POST /api/checkin`, then `POST /api/events/:id/close`.
+5. Admin opens `GET /api/events/:id/report` and `GET /api/admin/savings`.

@@ -1,0 +1,82 @@
+ROLE
+You are a senior NestJS engineer. Build the complete backend (API server) for "EventSense" inside my existing NestJS project. Work in vertical slices, run and verify each slice (build, start, curl/Swagger or e2e test) before the next, and commit-ready code after each. Never leave code unrun. Ask me nothing; where something is unspecified, choose the simplest sensible default and note it in the README.
+
+PRODUCT
+EventSense is a campus event platform that fixes miscalculation of food, seating, parking and electricity. Admins create events (venue, capacity, safety limit, menu, parking zones, equipment, cutoffs). Attendees (Next.js client) book a seat, pre-order food and reserve parking. The server turns those bookings into an attendance forecast and recommends food quantities, seat/parking utilization and a power-load plan. On event day it supports QR check-in, QR food collection, waitlist auto-promotion and timed notifications. After the event it compares planned vs actual and recalibrates show-up rates.
+
+STACK
+- NestJS (TypeScript, strict), Prisma ORM + PostgreSQL, class-validator + class-transformer (global ValidationPipe, whitelist + forbidNonWhitelisted), @nestjs/jwt + passport-jwt, bcrypt, @nestjs/schedule (cron), @nestjs/throttler, helmet, @nestjs/swagger (docs at /docs), nodemailer (if SMTP env vars missing, log the email and store it in an Outbox table instead of failing), qrcode (data-URL PNG), @nestjs/config with env validation.
+- CORS enabled for CLIENT_URL (Next.js). Global prefix /api. Consistent error shape {statusCode, message, error}.
+- Provide .env.example: DATABASE_URL, JWT_SECRET, JWT_EXPIRES_IN, CLIENT_URL, ADMIN_SIGNUP_CODE, SMTP_HOST/PORT/USER/PASS/FROM, PORT.
+
+MODULES (folder per module: controller, service, dto)
+auth, users, events, bookings, food, parking, equipment, planner, checkin, notifications, reports, calibration, health, common (guards, decorators, filters), prisma.
+
+DATA MODEL (Prisma)
+- User: id, name, email (unique), passwordHash, role (ADMIN|USER), createdAt
+- Event: id, title, description, venue, startAt, endAt, type (SEMINAR|WORKSHOP|CULTURAL|SPORTS|FEST|OTHER), isPaid, capacity, safetyLimit, powerLimitKw, bookingCutoffAt, foodCutoffAt, seatReleaseAt (nullable), status (DRAFT|PUBLISHED|LIVE|CLOSED), createdById
+- FoodItem: id, eventId, name, tag (VEG|NON_VEG|HALAL|VEGAN), unitCost (optional), maxQuantity (optional)
+- ParkingZone: id, eventId, name, vehicleType (TWO_WHEELER|FOUR_WHEELER), capacity
+- Equipment: id, eventId, name, watts, count, startAt, endAt, occupancyScaled (boolean)
+- Booking: id, eventId, userId, status (CONFIRMED|WAITLISTED|CANCELLED|RELEASED|CHECKED_IN), waitlistPosition?, qrToken (unique, random), parkingZoneId?, checkedInAt?, createdAt; unique (eventId, userId)
+- FoodOrder: id, bookingId (unique), createdAt; FoodOrderItem: id, orderId, foodItemId, quantity, collectedQty (default 0)
+- Notification: id, eventId, title, body, type (INFO|FOOD|SCHEDULE|PARKING|ALERT), scheduledAt, sentAt?, createdById
+- Outbox: id, to, subject, body, status, createdAt
+- CalibrationStat: id, eventType, isPaid, showRate (float), walkInRate (float), claimRate (float), samples (int); unique (eventType, isPaid)
+- EventReport: id, eventId (unique), plannedJson, actualJson, createdAt
+Add indexes on foreign keys and (eventId, status). Seed script (prisma/seed.ts): 1 admin (admin@eventsense.dev / Admin@123), 5 users, CalibrationStat defaults, and 2 realistic events (one with ~400 bookings and food orders, equipment list, 2 parking zones, a few notifications), so the planner demo works immediately.
+
+AUTH & ROLES
+- POST /api/auth/register (role USER; if body.adminCode === ADMIN_SIGNUP_CODE then ADMIN), POST /api/auth/login -> {accessToken, user}, GET /api/auth/me.
+- JwtAuthGuard + RolesGuard + @Roles() decorator. Admin-only routes for creating/editing events, planner, reports, notifications, scanning. Admins may only modify their own events.
+
+ENDPOINTS
+Events: POST /events, PATCH /events/:id, POST /events/:id/publish, GET /events (public, published only, paginated), GET /events/:id (public, includes live counts: seatsTaken, seatsAvailable, waitlistCount, parking availability per zone), GET /admin/events (own events).
+Config (admin): POST/GET/DELETE /events/:id/food-items, /parking-zones, /equipment.
+Bookings: POST /events/:id/bookings {parkingZoneId?} -> CONFIRMED or WAITLISTED; GET /me/bookings; DELETE /bookings/:id (cancel; auto-promote first waitlisted); GET /bookings/:id/ticket -> QR data URL + details.
+Food: PUT /bookings/:id/food-order {items:[{foodItemId, quantity}]} (replace order; reject after foodCutoffAt; quantity 1-10; respect maxQuantity), GET /bookings/:id/food-order.
+Planner (admin): GET /events/:id/planner -> see PLANNER LOGIC.
+Check-in (admin): POST /checkin {qrToken}, POST /food-collect {qrToken, items:[{foodItemId, quantity}]} (cannot exceed ordered minus collected).
+Notifications: POST /events/:id/notifications (admin; scheduledAt optional = send now), GET /events/:id/notifications (only users with an active booking, plus admins).
+Reports (admin): POST /events/:id/close (sets CLOSED, builds EventReport, runs calibration), GET /events/:id/report, GET /admin/savings (totals across closed events).
+Health: GET /api/health.
+
+BUSINESS RULES
+- Effective capacity = min(capacity, safetyLimit). Booking runs inside a Prisma $transaction with row locking (SELECT ... FOR UPDATE via $queryRaw on the Event row) so the last seat can never be double-booked. If full -> WAITLISTED with position. Booking closed after bookingCutoffAt or when event not PUBLISHED/LIVE.
+- Parking: same transactional approach per zone; if zone full return 409 with a clear message (booking still succeeds without parking only if client omitted zone).
+- Cancel: frees seat/parking and promotes the first WAITLISTED booking, enqueueing an email + notification.
+- Cron every minute: (1) send due Notifications (email each booked user via Nodemailer or Outbox), set sentAt; (2) for events past seatReleaseAt, mark CONFIRMED-but-not-checked-in bookings RELEASED and promote waitlist.
+- Auto-generate default notifications when an event is published: "Booking confirmed" per booking, food-timing reminder 1h before startAt, "Last call for food" at foodCutoffAt.
+
+PLANNER LOGIC (pure functions in planner/forecast.ts, fully unit-tested)
+1. Rates: load CalibrationStat for (event.type, event.isPaid); if missing use defaults: paid showRate 0.93, free showRate 0.62, walkInRate 0.05 (paid) / 0.10 (free), claimRate 0.85 (paid) / 0.75 (free). Treat these as configurable constants.
+2. booked = count of CONFIRMED + CHECKED_IN. likely = round(booked*showRate + booked*walkInRate). sd = sqrt(booked*showRate*(1-showRate)). low = max(0, round(likely - 1.65*sd)), high = round(likely + 1.65*sd). Return {booked, low, likely, high, showRate, walkInRate} and a plain-English explanation string.
+3. Seats: utilization = likely/effectiveCapacity; status OK (<0.85), TIGHT (0.85-1), OVER (>1); suggest "open waitlist"/"release more seats"/"venue too large" messages. Also overbookSuggestion for free events.
+4. Food, per item: ordered = sum of quantities; walk-in share = item's ordered share of total orders * (walkIn count * 0.5); recommended = ceil(ordered*claimRate + walkInShare); low/high scaled by low/high attendance ratio; add 5% buffer to recommended. Output {item, ordered, recommended, low, high, risk: 'WASTE_RISK'|'BALANCED'|'SHORTAGE_RISK'} and overall comparison vs "manual guess" = total bookings (so the UI can show meals saved) and estimated cost saved when unitCost exists.
+5. Parking: per zone expected demand = bookedInZone * showRate scaled; utilization + status.
+6. Power: build a timeline in 30-minute steps from event start to end. For each Equipment active at that step: kW = watts*count/1000, multiplied by max(0.3, likely/effectiveCapacity) when occupancyScaled. Return points [{time, loadKw}], peakKw, peakTime, powerLimitKw, headroomKw, status OK (<80% of limit) | WARNING (80-100%) | OVERLOAD (>100%), plus a recommendation (e.g. stagger the AC start).
+The planner endpoint returns {attendance, seats, food, parking, power, generatedAt}.
+
+CALIBRATION
+On POST /events/:id/close: actualAttendance = CHECKED_IN count, actualFood collected per item, actualParking. Update CalibrationStat for (type,isPaid) with an exponential moving average: showRate = 0.7*old + 0.3*(actualShowUps/booked); likewise walkInRate and claimRate; samples++. Store planned vs actual in EventReport and compute savings: mealsSaved = max(0, bookings - collectedMealsEstimate) style metric (document your formula in README), seat utilization, peak kW vs limit.
+
+SECURITY & QUALITY
+- DTO validation on every route, ParseUUIDPipe/ParseIntPipe, no raw SQL except the locking query (parameterised). Never return passwordHash. Helmet, throttler (stricter on auth routes), generic error messages (no stack traces in prod).
+- Swagger with bearer auth and DTO examples.
+- Tests: Jest unit tests for forecast/planner functions (edge cases: 0 bookings, capacity exceeded, no equipment, no food items, missing cutoff), and an e2e test that fires 20 parallel booking requests against an event with 5 seats and asserts exactly 5 CONFIRMED and the rest WAITLISTED. Also e2e: register -> login -> book -> food order -> check-in -> close -> report.
+- README: setup, env vars, `prisma migrate dev`, seed, run, test, endpoint table, formulas, and assumptions.
+
+BUILD ORDER (verify each before moving on)
+1. Prisma schema + migration + seed, Prisma/Config/Health modules.
+2. Auth + roles guards.
+3. Events + config (food, parking, equipment) CRUD.
+4. Bookings with transactions, waitlist, cancel/promote, parking, tickets/QR.
+5. Food orders with cutoff.
+6. Planner (pure functions first, tests, then endpoint).
+7. Check-in and food-collect.
+8. Notifications + cron + email/Outbox.
+9. Close event, calibration, report, savings.
+10. Swagger polish, e2e tests, README, Dockerfile (multi-stage), final full run.
+
+DEFINITION OF DONE
+App starts with `npm run start:dev` against a fresh DB after migrate + seed; the planner endpoint on the seeded event returns sensible numbers; the concurrency test passes; /docs shows all routes; every endpoint above works through Swagger. At the end, print a summary table of all routes and the demo flow (login as admin -> planner -> check-in -> close -> report).
